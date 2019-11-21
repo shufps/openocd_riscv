@@ -1,3 +1,15 @@
+OpenOCD_RISCV-fork for ICCFPGA
+==============================
+
+Not much changed. This fork contains some additional config-files for the ICCFPGA-JTAG via Raspberry Pi3/4 GPIO for the Spartan 7 and VexRiscv soft-cpu
+
+Configure it with:
+
+```
+./configure --enable-bcm2835gpio --enable-ftdi --enable-dummy
+```
+
+
 In very short, VexRiscv
 ===================
 
