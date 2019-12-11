@@ -6,26 +6,60 @@ Not much changed. This fork contains some additional config-files for the ICCFPG
 Configure it with:
 
 ```
+# on raspberry pi3 and 4
 ./configure --enable-bcm2835gpio --enable-ftdi --enable-dummy
+
+# on PC
+./configure --enable-ftdi --enable-dummy
 ```
 
 Added configuration files :
+- tcl/interface/raspberry4-native-iccfpga-vexriscv.cfg
+- tcl/interface/raspberry3-native-iccfpga-fpga.cfg
+- tcl/interface/raspberry4-native-iccfpga-fpga.cfg
+- tcl/interface/sysfsgpio-raspberrypi-iccfpga-vexriscv.cfg
+- tcl/interface/sysfsgpio-raspberrypi-iccfpga-fpga.cfg
+- tcl/interface/raspberry3-native-iccfpga-vexriscv.cfg
 - tcl/target/iccfpga-vexriscv.cfg
 - tcl/target/iccfpga-fpga.cfg
-- tcl/interface/raspberry3-native-vexriscv.cfg
-- tcl/interface/raspberry4-native-vexriscv.cfg
-- tcl/interface/raspberry3-native-fpga.cfg
-- tcl/interface/raspberry4-native-fpga.cfg
 
-GPIO of Pi3 and Pi4 differens:
+GPIO of Pi3 and Pi4 differes:
 
 - GPIO base address
 - speed coefficients
 
-Start openocd this way:
+Patterns
+--------
 
+Start OpenOCD Debugger for VexRiscv on Development-Board (HAT)
 ```
-todo
+sudo openocd -c "bindto 0.0.0.0" -f interface/raspberry4-native-iccfpga-vexriscv.cfg -f target/iccfpga-vexriscv.cfg
+```
+
+Upload Bitstream to FPGA
+```
+sudo openocd -f interface/raspberry4-native-iccfpga-fpga.cfg -f target/iccfpga-fpga.cfg  -c "init"  -c "svf svftarget_0.svf" -c "exit" 
+```
+
+Upload ELF-file to RISC-V
+```
+sudo openocd -f interface/raspberry4-native-iccfpga-vexriscv.cfg -f target/iccfpga-vexriscv.cfg -c "init" -c "reset halt" -c "load_image iccfpga-rv.elf 0x00000000" -c "reset run" -c "resume" -c "exit"
+```
+
+Unreset RISC-V on ICCFPGA Dev-Board:
+```
+#!/bin/bash
+# export jtag_rv_reset, switch pin to output and deassert reset
+
+cd /sys/class/gpio
+echo 19 > export
+echo "out" > gpio19/direction
+echo "1" > gpio19/value
+```
+
+Not OpenOCD-related but handy to have it here included. 
+```
+sudo picocom --baud 115200 --echo --imap crcrlf /dev/ttyS0
 ```
 
 
