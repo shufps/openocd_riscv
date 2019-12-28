@@ -7,7 +7,7 @@ Configure it with:
 
 ```
 # on raspberry pi3 and 4
-./configure --enable-bcm2835gpio --enable-ftdi --enable-dummy
+./configure --enable-bcm2835gpio --enable-ftdi --enable-dummy --enable-sysfsgpio
 
 # on PC
 ./configure --enable-ftdi --enable-dummy
