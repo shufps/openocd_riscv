@@ -1,7 +1,7 @@
 OpenOCD_RISCV-fork for ICCFPGA
 ==============================
 
-Not much changed. This fork contains some additional config-files for the ICCFPGA-JTAG via Raspberry Pi3/4 GPIO for the Spartan 7 and VexRiscv soft-cpu
+Not much changed. This fork contains some additional config-files for the ICCFPGA-JTAG via Raspberry Pi3/4 GPIO for VexRiscv soft-cpu
 
 Configure it with:
 
@@ -15,13 +15,9 @@ Configure it with:
 
 Added configuration files :
 - tcl/interface/raspberry4-native-iccfpga-vexriscv.cfg
-- tcl/interface/raspberry3-native-iccfpga-fpga.cfg
-- tcl/interface/raspberry4-native-iccfpga-fpga.cfg
 - tcl/interface/sysfsgpio-raspberrypi-iccfpga-vexriscv.cfg
-- tcl/interface/sysfsgpio-raspberrypi-iccfpga-fpga.cfg
 - tcl/interface/raspberry3-native-iccfpga-vexriscv.cfg
 - tcl/target/iccfpga-vexriscv.cfg
-- tcl/target/iccfpga-fpga.cfg
 
 GPIO of Pi3 and Pi4 differes:
 
@@ -34,11 +30,6 @@ Patterns
 Start OpenOCD Debugger for VexRiscv on Development-Board (HAT)
 ```
 sudo openocd -c "bindto 0.0.0.0" -f interface/raspberry4-native-iccfpga-vexriscv.cfg -f target/iccfpga-vexriscv.cfg
-```
-
-Upload Bitstream to FPGA
-```
-sudo openocd -f interface/raspberry4-native-iccfpga-fpga.cfg -f target/iccfpga-fpga.cfg  -c "init"  -c "svf svftarget_0.svf" -c "exit" 
 ```
 
 Upload ELF-file to RISC-V
