@@ -825,8 +825,17 @@ int vexriscv_semihosting(struct target *target, int *retval)
     }
 
 	uint8_t tmp[12];
+
 	/* Read the current instruction, including the bracketing */
-    /*int result =*/ vexriscv_read_memory(target, pc-4, sizeof(uint32_t), 3, tmp);
+	int result=0;
+	if (pc & 0x2) { 	
+		// 16bit aligned - can happen in case of code-compression enabled
+		// in this case read 6 half-words 
+        	result = vexriscv_read_memory(target, pc-4, sizeof(uint16_t), 6, tmp);
+	} else {
+	        result = vexriscv_read_memory(target, pc-4, sizeof(uint32_t), 3, tmp);
+	}
+	LOG_DEBUG("semihosting read memory result %d", result);
 
     // todo error handling
 
