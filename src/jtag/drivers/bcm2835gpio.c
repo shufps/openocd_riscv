@@ -59,6 +59,11 @@ static void bcm2835_swdio_drive(bool is_output);
 static int bcm2835gpio_init(void);
 static int bcm2835gpio_quit(void);
 
+#define IFACE_SWD	0x01
+#define IFACE_JTAG	0x02
+
+static int ifaceMask = 0x00;
+
 static struct bitbang_interface bcm2835gpio_bitbang = {
 	.read = bcm2835gpio_read,
 	.write = bcm2835gpio_write,
@@ -383,7 +388,7 @@ static const struct command_registration bcm2835gpio_command_handlers[] = {
 		.name = "bcm2835gpio_peripheral_base",
 		.handler = &bcm2835gpio_handle_peripheral_base,
 		.mode = COMMAND_CONFIG,
-		.help = "peripheral base to access GPIOs (RPi1 0x20000000, RPi2 0x3F000000).",
+		.help = "peripheral base to access GPIOs (RPi1 0x20000000, RPi2-3 0x3F000000, RPi4 0xFE000000).",
 	},
 
 	COMMAND_REGISTRATION_DONE
@@ -433,14 +438,21 @@ static int bcm2835gpio_init(void)
 
 	LOG_INFO("BCM2835 GPIO JTAG/SWD bitbang driver");
 
-	if (bcm2835gpio_jtag_mode_possible()) {
-		if (bcm2835gpio_swd_mode_possible())
-			LOG_INFO("JTAG and SWD modes enabled");
-		else
-			LOG_INFO("JTAG only mode enabled (specify swclk and swdio gpio to add SWD mode)");
-	} else if (bcm2835gpio_swd_mode_possible()) {
+	ifaceMask = 0x00;
+	ifaceMask |= (bcm2835gpio_jtag_mode_possible()) ? IFACE_JTAG : 0;
+	ifaceMask |= (bcm2835gpio_swd_mode_possible()) ? IFACE_SWD : 0;
+
+	switch (ifaceMask) {
+	case IFACE_JTAG:
+		LOG_INFO("JTAG only mode enabled (specify swclk and swdio gpio to add SWD mode)");
+		break;
+	case IFACE_SWD:
 		LOG_INFO("SWD only mode enabled (specify tck, tms, tdi and tdo gpios to add JTAG mode)");
-	} else {
+		break;
+	case (IFACE_JTAG | IFACE_SWD):
+		LOG_INFO("JTAG and SWD modes enabled");
+		break;
+	default:
 		LOG_ERROR("Require tck, tms, tdi and tdo gpios for JTAG mode and/or swclk and swdio gpio for SWD mode");
 		return ERROR_JTAG_INIT_FAILED;
 	}
@@ -471,28 +483,45 @@ static int bcm2835gpio_init(void)
 	}
 
 	/* set 4mA drive strength, slew rate limited, hysteresis on */
-	pads_base[BCM2835_PADS_GPIO_0_27_OFFSET] = 0x5a000008 + 1;
+	//pads_base[BCM2835_PADS_GPIO_0_27_OFFSET] = 0x5a000008 + 1;
 
-	tdo_gpio_mode = MODE_GPIO(tdo_gpio);
-	tdi_gpio_mode = MODE_GPIO(tdi_gpio);
-	tck_gpio_mode = MODE_GPIO(tck_gpio);
-	tms_gpio_mode = MODE_GPIO(tms_gpio);
-	swclk_gpio_mode = MODE_GPIO(swclk_gpio);
-	swdio_gpio_mode = MODE_GPIO(swdio_gpio);
 	/*
 	 * Configure TDO as an input, and TDI, TCK, TMS, TRST, SRST
 	 * as outputs.  Drive TDI and TCK low, and TMS/TRST/SRST high.
 	 */
-	INP_GPIO(tdo_gpio);
+	tdo_gpio_mode = 0;
+	tdi_gpio_mode = 0;
+	tck_gpio_mode = 0;
+	tms_gpio_mode = 0;
+	swclk_gpio_mode = 0;
+	swdio_gpio_mode = 0;
 
-	GPIO_CLR = 1<<tdi_gpio | 1<<tck_gpio | 1<<swdio_gpio | 1<<swclk_gpio;
-	GPIO_SET = 1<<tms_gpio;
+	if (ifaceMask & IFACE_JTAG) {
+		// save old state
+		tdo_gpio_mode = MODE_GPIO(tdo_gpio);
+		tdi_gpio_mode = MODE_GPIO(tdi_gpio);
+		tck_gpio_mode = MODE_GPIO(tck_gpio);
+		tms_gpio_mode = MODE_GPIO(tms_gpio);
 
-	OUT_GPIO(tdi_gpio);
-	OUT_GPIO(tck_gpio);
-	OUT_GPIO(tms_gpio);
-	OUT_GPIO(swclk_gpio);
-	OUT_GPIO(swdio_gpio);
+		// TDI input
+		INP_GPIO(tdo_gpio);
+		// other JTAG pins output
+		GPIO_CLR = 1<<tdi_gpio | 1<<tck_gpio;
+		GPIO_SET = 1<<tms_gpio;
+		OUT_GPIO(tdi_gpio);
+		OUT_GPIO(tck_gpio);
+		OUT_GPIO(tms_gpio);
+	}
+	if (ifaceMask & IFACE_SWD) {
+		// save old state
+		swclk_gpio_mode = MODE_GPIO(swclk_gpio);
+		swdio_gpio_mode = MODE_GPIO(swdio_gpio);
+		
+		GPIO_CLR = 1<<swdio_gpio | 1<<swclk_gpio;
+		OUT_GPIO(swclk_gpio);
+		OUT_GPIO(swdio_gpio);
+	}
+
 	if (trst_gpio != -1) {
 		trst_gpio_mode = MODE_GPIO(trst_gpio);
 		GPIO_SET = 1 << trst_gpio;
@@ -505,8 +534,8 @@ static int bcm2835gpio_init(void)
 	}
 
 	LOG_DEBUG("saved pinmux settings: tck %d tms %d tdi %d "
-		  "tdo %d trst %d srst %d", tck_gpio_mode, tms_gpio_mode,
-		  tdi_gpio_mode, tdo_gpio_mode, trst_gpio_mode, srst_gpio_mode);
+		  "tdo %d trst %d srst %d swdio %d swclk %d", tck_gpio_mode, tms_gpio_mode,
+		  tdi_gpio_mode, tdo_gpio_mode, trst_gpio_mode, srst_gpio_mode, swdio_gpio_mode, swclk_gpio_mode);
 
 	if (swd_mode) {
 		bcm2835gpio_bitbang.write = bcm2835gpio_swd_write;
@@ -518,16 +547,22 @@ static int bcm2835gpio_init(void)
 
 static int bcm2835gpio_quit(void)
 {
-	SET_MODE_GPIO(tdo_gpio, tdo_gpio_mode);
-	SET_MODE_GPIO(tdi_gpio, tdi_gpio_mode);
-	SET_MODE_GPIO(tck_gpio, tck_gpio_mode);
-	SET_MODE_GPIO(tms_gpio, tms_gpio_mode);
-	SET_MODE_GPIO(swclk_gpio, swclk_gpio_mode);
-	SET_MODE_GPIO(swdio_gpio, swdio_gpio_mode);
+	LOG_DEBUG("bcn2835gpio quit");
+	if (ifaceMask & IFACE_JTAG) {
+		SET_MODE_GPIO(tdo_gpio, tdo_gpio_mode);
+		SET_MODE_GPIO(tdi_gpio, tdi_gpio_mode);
+		SET_MODE_GPIO(tck_gpio, tck_gpio_mode);
+		SET_MODE_GPIO(tms_gpio, tms_gpio_mode);
+	}
+	if (ifaceMask & IFACE_SWD) {
+		SET_MODE_GPIO(swclk_gpio, swclk_gpio_mode);
+		SET_MODE_GPIO(swdio_gpio, swdio_gpio_mode);
+	}
 	if (trst_gpio != -1)
 		SET_MODE_GPIO(trst_gpio, trst_gpio_mode);
 	if (srst_gpio != -1)
 		SET_MODE_GPIO(srst_gpio, srst_gpio_mode);
 
+	close(dev_mem_fd);
 	return ERROR_OK;
 }
